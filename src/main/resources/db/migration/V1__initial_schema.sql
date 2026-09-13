@@ -212,6 +212,7 @@ CREATE TABLE broken_software_component_version_errors (
 
 CREATE TABLE event_receiver_state (
     id VARCHAR(255) PRIMARY KEY,
+    version BIGINT,
     delivery_state VARCHAR(50) NOT NULL DEFAULT 'NEVER',
     highest_event_id_seen BIGINT,
     events_delivered BIGINT NOT NULL DEFAULT 0,
