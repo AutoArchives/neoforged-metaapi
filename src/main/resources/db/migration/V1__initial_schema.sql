@@ -239,3 +239,14 @@ CREATE TABLE event (
 );
 
 CREATE UNIQUE INDEX idx_event_external_id ON event (external_id);
+
+-- ============================================================================
+-- Distributed Job Locks (for HA scheduling)
+-- ============================================================================
+
+CREATE TABLE job_lock (
+    job_id VARCHAR(255) PRIMARY KEY,
+    locked_at TIMESTAMPTZ,
+    locked_by VARCHAR(255),
+    expires_at TIMESTAMPTZ
+);

@@ -29,3 +29,8 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
     validate-on-migrate: true
+
+# Job scheduler configuration for HA mode
+job-scheduler:
+  # How often to poll for jobs that need to run
+  poll-interval: 10s
