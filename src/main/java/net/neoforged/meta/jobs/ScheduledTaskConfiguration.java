@@ -69,6 +69,7 @@ public class ScheduledTaskConfiguration implements SchedulingConfigurer {
  * Provides the instance ID used for distributed job locking.
  */
 @Configuration
+@EnableConfigurationProperties(ScheduledTasksProperties.class)
 @Profile("postgres")
 class HaJobConfiguration {
 

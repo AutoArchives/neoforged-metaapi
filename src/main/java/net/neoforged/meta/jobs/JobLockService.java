@@ -10,7 +10,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Optional;
 
 /**
  * Service for acquiring, renewing, and releasing distributed job locks.
@@ -34,54 +33,68 @@ public class JobLockService {
     }
 
     /**
-     * Try to acquire a lock for the specified job.
+     * Try to acquire the distributed lock for the specified scheduled slot.
+     * <p>
+     * Acquisition is a single atomic conditional UPDATE: it succeeds only if no other
+     * replica currently holds the lock (or its lock has expired) AND this slot has not
+     * already been executed by any replica. This guarantees exactly-once-per-slot
+     * execution across replicas, even for jobs that finish in milliseconds.
      *
      * @param jobId The job identifier
-     * @return true if lock was acquired, false if another replica holds it
+     * @param slot  The scheduled fire time (from the cron expression) this run belongs to
+     * @return true if lock was acquired, false otherwise
      */
     @Transactional
-    public boolean tryAcquire(String jobId) {
-        return tryAcquire(jobId, DEFAULT_LOCK_TTL);
+    public boolean tryAcquire(String jobId, Instant slot) {
+        return doTryAcquire(jobId, DEFAULT_LOCK_TTL, slot);
     }
 
     /**
-     * Try to acquire a lock for the specified job with a custom TTL.
+     * Try to acquire the distributed lock with a custom TTL.
      *
      * @param jobId The job identifier
      * @param ttl   Time-to-live for the lock
-     * @return true if lock was acquired, false if another replica holds it
+     * @param slot  The scheduled fire time (from the cron expression) this run belongs to
+     * @return true if lock was acquired, false otherwise
      */
     @Transactional
-    public boolean tryAcquire(String jobId, Duration ttl) {
+    public boolean tryAcquire(String jobId, Duration ttl, Instant slot) {
+        return doTryAcquire(jobId, ttl, slot);
+    }
+
+    private boolean doTryAcquire(String jobId, Duration ttl, Instant slot) {
         Instant now = Instant.now();
+        Instant expiry = now.plus(ttl);
 
-        // Ensure the lock row exists
-        JobLock lock = dao.findById(jobId).orElseGet(() -> {
-            JobLock newLock = new JobLock();
-            newLock.setJobId(jobId);
-            return dao.save(newLock);
-        });
+        // Ensure the lock row exists (idempotent; safe under concurrent creation)
+        dao.ensureRow(jobId);
 
-        // Try to acquire with SELECT FOR UPDATE SKIP LOCKED
-        Optional<JobLock> acquired = dao.tryAcquire(jobId, now);
-        if (acquired.isEmpty()) {
-            // Check if another replica holds it (for logging)
-            if (lock.getLockedBy() != null && !lock.getLockedBy().equals(instanceId)) {
-                logger.debug("Job '{}' is already running by instance '{}' (expires at {})",
-                        jobId, lock.getLockedBy(), lock.getExpiresAt());
-            }
-            return false;
+        int acquired = dao.acquireIfFree(jobId, instanceId, now, expiry, slot);
+        if (acquired > 0) {
+            logger.info("Acquired lock for job '{}' (expires at {})", jobId, expiry);
+            return true;
         }
 
-        // Mark as locked by this instance
-        JobLock locked = acquired.get();
-        locked.setLockedAt(now);
-        locked.setLockedBy(instanceId);
-        locked.setExpiresAt(now.plus(ttl));
-        dao.saveAndFlush(locked);
+        // For logging: explain why we couldn't acquire
+        JobLock current = dao.findById(jobId).orElse(null);
+        if (current != null) {
+            if (instanceId.equals(current.getLockedBy())) {
+                logger.debug("Job '{}' lock already held by this instance", jobId);
+            } else if (current.getLockedBy() != null && !isExpired(current, now)) {
+                logger.debug("Job '{}' is already running by instance '{}' (expires at {})",
+                        jobId, current.getLockedBy(), current.getExpiresAt());
+            } else if (current.getLastRunAt() != null && !current.getLastRunAt().isBefore(slot)) {
+                logger.debug("Job '{}' slot {} was already executed (last run at {})",
+                        jobId, slot, current.getLastRunAt());
+            } else {
+                logger.debug("Could not acquire lock for job '{}'", jobId);
+            }
+        }
+        return false;
+    }
 
-        logger.info("Acquired lock for job '{}' (expires at {})", jobId, locked.getExpiresAt());
-        return true;
+    private static boolean isExpired(JobLock lock, Instant now) {
+        return lock.getExpiresAt() != null && lock.getExpiresAt().isBefore(now);
     }
 
     /**

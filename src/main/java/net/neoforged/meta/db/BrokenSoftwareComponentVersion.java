@@ -24,7 +24,7 @@ import java.util.List;
 @Table(
         indexes = {
                 @Index(name = "idx_broken_version_maven_group_artifact", columnList = "groupId, artifactId"),
-                @Index(name = "idx_broken_version_maven_gav", columnList = "groupId, artifactId, version", unique = true)
+                @Index(name = "idx_broken_version_maven_gav", columnList = "groupId, artifactId, versionString", unique = true)
         }
 )
 public class BrokenSoftwareComponentVersion {

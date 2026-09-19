@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZonedDateTime;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,14 +21,14 @@ import java.util.concurrent.Executors;
 /**
  * Distributed job scheduler that ensures only one replica executes each scheduled job at a time.
  * <p>
- * This replaces the simple cron-based scheduling with a database-backed locking mechanism
- * using PostgreSQL's SELECT FOR UPDATE SKIP LOCKED.
+ * This replaces the simple cron-based scheduling with a database-backed locking mechanism.
  * <p>
  * Works by:
  * 1. Running a fast poll (every 10 seconds) that checks all configured jobs
- * 2. For each job whose cron expression indicates it's due, try to acquire a lock
+ * 2. For each job whose cron expression indicates it's due, try to acquire an atomic lock
+ *    for this scheduled slot (a single conditional UPDATE also records the executed slot)
  * 3. If lock acquired: run the job in a separate thread, release lock when done
- * 4. If lock not acquired: another replica is running it, skip
+ * 4. If lock not acquired: another replica is running it or already ran this slot, skip
  */
 @Component
 @Profile("postgres")
@@ -89,18 +90,19 @@ public class JobScheduler {
         }
 
         CronExpression cronExpression = CronExpression.parse(config.cronPattern());
-        Instant now = Instant.now();
+        ZonedDateTime now = ZonedDateTime.now();
 
-        // Check if the job is due: look for next execution in the past 5 seconds to now+5 seconds
-        Instant nextExecution = cronExpression.next(now.minusSeconds(5));
+        // Check if the job is due: look for next execution in the past 5 seconds to now+5 seconds.
+        // Framework 7's cron engine requires a full date-time type (Instant lacks DayOfWeek).
+        ZonedDateTime nextExecution = cronExpression.next(now.minusSeconds(5));
         if (nextExecution != null && !nextExecution.isAfter(now.plusSeconds(5))) {
             // Job is due (within 5 seconds of scheduled time)
             logger.debug("Job '{}' is due according to cron expression", jobId);
 
-            // Try to acquire lock
-            if (jobLockService.tryAcquire(jobId)) {
+            // Try to atomically acquire the lock for this scheduled slot
+            if (jobLockService.tryAcquire(jobId, nextExecution.toInstant())) {
                 logger.info("Starting job '{}'", jobId);
-                lastScheduledTime.put(jobId, now);
+                lastScheduledTime.put(jobId, now.toInstant());
 
                 // Run job in separate thread so poll isn't blocked
                 jobExecutor.submit(() -> executeJob(jobId, job));

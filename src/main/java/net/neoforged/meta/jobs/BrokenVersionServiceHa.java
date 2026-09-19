@@ -65,8 +65,8 @@ public class BrokenVersionServiceHa implements BrokenVersionService {
      */
     @Scheduled(fixedRate = CLEANUP_INTERVAL_MS)
     public void cleanupExpiredLeases() {
-        int cleaned = dao.cleanupExpiredLeases(Instant.now());
-        if (cleaned > 0) {
+        Integer cleaned = transactionTemplate.execute(status -> dao.cleanupExpiredLeases(Instant.now()));
+        if (cleaned != null && cleaned > 0) {
             logger.info("Cleaned up {} expired retry leases", cleaned);
         }
     }

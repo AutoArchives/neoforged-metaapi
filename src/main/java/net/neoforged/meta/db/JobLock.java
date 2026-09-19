@@ -40,6 +40,13 @@ public class JobLock {
     @Nullable
     private Instant expiresAt;
 
+    /**
+     * The scheduled slot (cron fire time) that was last executed for this job.
+     * Prevents a second replica from re-running the same slot after a fast job released its lock.
+     */
+    @Nullable
+    private Instant lastRunAt;
+
     public String getJobId() {
         return jobId;
     }
@@ -73,5 +80,14 @@ public class JobLock {
 
     public void setExpiresAt(@Nullable Instant expiresAt) {
         this.expiresAt = expiresAt;
+    }
+
+    @Nullable
+    public Instant getLastRunAt() {
+        return lastRunAt;
+    }
+
+    public void setLastRunAt(@Nullable Instant lastRunAt) {
+        this.lastRunAt = lastRunAt;
     }
 }

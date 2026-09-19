@@ -2,15 +2,14 @@ package net.neoforged.meta.db;
 
 import org.springframework.context.annotation.Profile;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
-import jakarta.persistence.LockModeType;
+import org.springframework.data.repository.query.Param;
+
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * DAO for distributed job locking using PostgreSQL's SELECT FOR UPDATE SKIP LOCKED.
@@ -21,16 +20,38 @@ import java.util.Optional;
 public interface JobLockDao extends JpaRepository<JobLock, String> {
 
     /**
-     * Try to acquire a lock for a job that is not currently locked or has an expired lock.
-     * Uses SELECT FOR UPDATE SKIP LOCKED so competing replicas don't block each other.
-     *
-     * @param jobId       The job identifier
-     * @param now         Current timestamp for comparing expiration
-     * @return The lock row if acquired (with lock held), empty if another replica holds it
+     * Ensure a lock row exists for the given job. Idempotent: does nothing if the row
+     * already exists (even when created concurrently by another replica).
      */
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT jl FROM JobLock jl WHERE jl.jobId = :jobId AND (jl.lockedBy IS NULL OR jl.expiresAt < :now)")
-    Optional<JobLock> tryAcquire(String jobId, Instant now);
+    @Modifying
+    @Query(value = "INSERT INTO job_lock (job_id) VALUES (:jobId) ON CONFLICT (job_id) DO NOTHING", nativeQuery = true)
+    void ensureRow(@Param("jobId") String jobId);
+
+    /**
+     * Atomically acquire the lock and mark this scheduled slot as executed.
+     * Succeeds only if the row is free (unlocked or expired) AND no replica has already
+     * executed this slot ({@code last_run_at < :slot}). A single conditional UPDATE makes
+     * acquisition race-free: Postgres serializes concurrent updates on the row and each
+     * re-evaluates the WHERE clause against committed state.
+     *
+     * @param jobId      The job identifier
+     * @param instanceId ID of the acquiring replica
+     * @param now        Current timestamp (lock acquisition time)
+     * @param expiry     Lock expiration
+     * @param slot       Scheduled fire time this execution belongs to
+     * @return 1 if acquired, 0 otherwise
+     */
+    @Modifying
+    @Query("UPDATE JobLock jl SET jl.lockedBy = :instanceId, " +
+            "jl.lockedAt = :now, jl.expiresAt = :expiry, jl.lastRunAt = :slot " +
+            "WHERE jl.jobId = :jobId " +
+            "AND (jl.lockedBy IS NULL OR jl.expiresAt < :now) " +
+            "AND (jl.lastRunAt IS NULL OR jl.lastRunAt < :slot)")
+    int acquireIfFree(@Param("jobId") String jobId,
+                     @Param("instanceId") String instanceId,
+                     @Param("now") Instant now,
+                     @Param("expiry") Instant expiry,
+                     @Param("slot") Instant slot);
 
     /**
      * Release a lock if it was held by the specified instance.
