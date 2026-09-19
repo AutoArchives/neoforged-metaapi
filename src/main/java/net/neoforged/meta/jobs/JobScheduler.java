@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -42,6 +43,9 @@ public class JobScheduler {
 
     // Track last scheduled time for each job to determine if it's due
     private final Map<String, Instant> lastScheduledTime = new ConcurrentHashMap<>();
+
+    // Jobs currently executing on this instance (exposed via JobSchedulerHealthIndicator)
+    private final Set<String> runningJobIds = ConcurrentHashMap.newKeySet();
 
     public JobScheduler(ScheduledTasksProperties properties,
                         JobLockService jobLockService,
@@ -105,8 +109,16 @@ public class JobScheduler {
         }
     }
 
+    /**
+     * @return the ids of jobs currently executing on this instance
+     */
+    public Set<String> getRunningJobIds() {
+        return Set.copyOf(runningJobIds);
+    }
+
     private void executeJob(String jobId, Runnable job) {
         Instant jobStart = Instant.now();
+        runningJobIds.add(jobId);
         try {
             job.run();
 
@@ -117,6 +129,7 @@ public class JobScheduler {
             logger.error("Job '{}' failed after {}ms", jobId, durationMs, e);
             throw e;
         } finally {
+            runningJobIds.remove(jobId);
             jobLockService.release(jobId);
         }
     }

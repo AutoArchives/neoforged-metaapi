@@ -8,7 +8,8 @@ See [meta.yaml](./meta.yaml).
 
 ## Database
 
-The service uses SQLite to store its data.
+In development the service uses an embedded SQLite database. For production (Kubernetes)
+it runs against PostgreSQL — see [Deployment](#deployment-kubernetes) below.
 
 ## Indexing
 
@@ -76,3 +77,30 @@ jobs:
 If a browser is used to access the API, it will redirect to our IDP (Dex), which authenticates the user using
 GitHub and establishes a Session-Cookie. This is used to inspect the data stored in the API and debug issues
 by the NeoForge team and is not available to external users.
+
+## Deployment (Kubernetes)
+
+The service is designed to run as multiple replicas against a shared PostgreSQL database.
+A ready-to-apply manifest lives at [`k8s/metaapi-deployment.yaml`](./k8s/metaapi-deployment.yaml);
+scheduled discovery jobs are coordinated between replicas via database locks, so exactly one
+replica runs each job at any time. See `.agent/plans/ha-setup.md` for the full design.
+
+### Environment variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `SPRING_PROFILES_ACTIVE` | yes (K8s) | Must be `postgres` for HA deployments. |
+| `DB_URL` | yes (K8s) | PostgreSQL JDBC URL, e.g. `jdbc:postgresql://db:5432/metaapi`. |
+| `DB_USERNAME` / `DB_PASSWORD` | yes (K8s) | Database credentials. |
+| `DB_POOL_SIZE` | no | HikariCP max pool size per replica (default 15). |
+| `INSTANCE_ID` | no | Stable identifier for this instance in job locks and logs. Generated from the pod hostname if unset. |
+
+### Health & probes
+
+- `/actuator/health/liveness` — process liveness (K8s liveness + startup probe).
+- `/actuator/health/readiness` — traffic readiness; includes database connectivity, connection pool stats,
+  Flyway migration status, and which jobs this instance is currently running.
+- `/actuator/prometheus` — metrics for the monitoring stack.
+
+Both health paths are publicly reachable (K8S probes do not authenticate); all other actuator endpoints
+require the admin role.
