@@ -81,9 +81,35 @@ by the NeoForge team and is not available to external users.
 ## Deployment (Kubernetes)
 
 The service is designed to run as multiple replicas against a shared PostgreSQL database.
-A ready-to-apply manifest lives at [`k8s/metaapi-deployment.yaml`](./k8s/metaapi-deployment.yaml);
-scheduled discovery jobs are coordinated between replicas via database locks, so exactly one
-replica runs each job at any time. See `.agent/plans/ha-setup.md` for the full design.
+Scheduled discovery jobs are coordinated between replicas via distributed database locks,
+so exactly one replica runs each job per scheduled slot. See `.agent/plans/ha-setup.md`
+for the full design.
+
+The canonical deployment artifact is the Helm chart in [`helm/meta-api`](./helm/meta-api).
+It supports both clusters that use **Ingress** (legacy) and clusters that use the
+**Gateway API** (newer); enable exactly one of them:
+
+```bash
+# Legacy cluster — Ingress
+helm install meta-api ./helm/meta-api \
+  -n meta --create-namespace \
+  --set image.tag=1.0.0 \
+  --set ingress.enabled=true \
+  --set ingress.host=meta-api.prod.k8s.neoforged.net
+
+# Newer cluster — Gateway API (requires the gateway.networking.k8s.io CRDs)
+helm install meta-api ./helm/meta-api \
+  -n meta --create-namespace \
+  --set image.tag=1.0.0 \
+  --set gateway.enabled=true \
+  --set gateway.parentRef.name=<gateway-name> \
+  --set 'gateway.hostnames[0]=meta-api.prod.k8s.neoforged.net'
+```
+The chart expects an existing Secret `meta-api-db` with keys `url`, `username` and
+`password` (override the name via `database.existingSecret`). To run API-only replicas,
+set `scheduledTasks.mavenVersionDiscoveryEnabled=false` and
+`scheduledTasks.minecraftVersionDiscoveryEnabled=false` on them, keeping at least one
+replica with both enabled.
 
 ### Environment variables
 
