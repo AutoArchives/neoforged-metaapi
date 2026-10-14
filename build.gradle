@@ -8,10 +8,10 @@ plugins {
     id 'com.google.cloud.tools.jib' version '3.5.1'
 }
 
-// Release version is defined in gradle.properties (project_version); CI reads the
-// same property for the image tag and both Helm chart versions.
+// Release versions come from git tags; CI passes -Dversion=<semver> at build time.
+// Local and ephemeral (main-branch) builds use this marker.
 group = 'net.neoforged'
-version = property('project_version')
+version = 'dev'
 description = 'Meta API for NeoForge'
 
 java {

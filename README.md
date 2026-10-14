@@ -96,9 +96,17 @@ directly:
 helm registry login ghcr.io
 helm pull oci://ghcr.io/neoforged/meta-api --version 1.0.0 -d .
 ```
-The project version is defined once in `gradle.properties` (`project_version`) and CI
-derives all of the following from it: the container image tag, the chart's `version`,
-and the chart's `appVersion`. To release a new version, bump that one property.
+**Releases are semantic-version git tags.** Pushing a tag like `v1.2.3` triggers a
+release build that publishes:
+
+- container image `ghcr.io/neoforged/metaapi:1.2.3` (and re-points `latest`),
+- the Helm chart as OCI artifact at version `1.2.3`
+  (`helm pull oci://ghcr.io/neoforged/meta-api --version 1.2.3 -d .`),
+- a GitHub Release with the chart `.tgz` attached.
+
+Pushes to `main` (or manual dispatch) only produce ephemeral dev images tagged with
+the short commit SHA — no chart publish, no release. To cut a release:
+tag and push (`git tag v1.2.3 && git push origin v1.2.3`).
 The chart supports both clusters that use **Ingress** (legacy) and clusters that use the
 **Gateway API** (newer); enable exactly one of them:
 

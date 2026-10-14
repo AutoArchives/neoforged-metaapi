@@ -1,19 +1,48 @@
-name: Publish image with plugin
+name: Build & publish
+
+# Versioning model: git tags are releases (semantic versioning).
+#   - Push a tag `vX.Y.Z`  -> release build: image tagged X.Y.Z (+ latest),
+#                              Helm chart published to GHCR as OCI at version
+#                              X.Y.Z, GitHub Release created with the chart .tgz.
+#   - Push to main / manual dispatch -> dev build only: ephemeral image tagged
+#     with the short commit SHA; no chart publish, no release.
 
 on:
   push:
     branches:
       - main
+    tags:
+      # Semantic version tags, e.g. v1.0.0, v1.2.3-rc.1
+      - 'v[0-9]+.*'
   workflow_dispatch:
 
 permissions:
   packages: write
+  contents: write   # creating GitHub Releases on tag push
 
 jobs:
-  build:
+  build-and-publish:
     runs-on: ubuntu-latest
     steps:
       - uses: neoforged/actions/checkout@main
+        with:
+          fetch-depth: 0   # full history, needed for auto-generated release notes
+
+      - name: Determine version and mode (git tag = release)
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            SEMVER="${GITHUB_REF#refs/tags/v}"
+            IS_RELEASE=true
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          else
+            SEMVER="$(git rev-parse --short HEAD)"
+            IS_RELEASE=false
+            TAG_NAME=""
+          fi
+          echo "semver=${SEMVER}" >> "$GITHUB_OUTPUT"
+          echo "is_release=${IS_RELEASE}" >> "$GITHUB_OUTPUT"
+          echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Setup Java 25
         uses: neoforged/actions/setup-java@main
@@ -23,50 +52,53 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 
-      # The project version in gradle.properties is the single source of truth;
-      # it tags the container image and both Helm chart versions.
-      - name: Read project version
-        id: project_version
-        run: |
-          v="$(sed -n 's/^project_version=//p' gradle.properties)"
-          if [ -z "$v" ]; then echo "project_version not found in gradle.properties" >&2; exit 1; fi
-          echo "version=${v}" >> "$GITHUB_OUTPUT"
-
       - name: Create Docker Metadata
         id: docker_metadata
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/neoforged/metaapi
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ steps.project_version.outputs.version }}
-            type=schedule
-            type=ref,event=branch
-            type=ref,event=tag
-            type=ref,event=pr
+            # Release tag = the semver from the git tag; dev builds = short SHA.
+            type=raw,value=${{ steps.version.outputs.semver }}
+            # `latest` always points at the most recent release.
+            type=raw,value=latest,enable={{ startsWith(github.ref, 'refs/tags/v') }}
 
       - name: Build with Gradle (multi-arch amd64 + arm64)
-        run: ./gradlew jib -Djib.console=plain
+        run: ./gradlew jib -Djib.console=plain "-Dversion=${{ steps.version.outputs.semver }}"
         env:
           GH_USERNAME: '${{ github.actor }}'
           GH_PASSWORD: '${{ github.token }}'
           DOCKER_METADATA_JSON: '${{ steps.docker_metadata.outputs.json }}'
 
-      # Publishes the Helm chart as an OCI artifact to ghcr.io/neoforged/meta-api.
-      # Both `version` and `appVersion` in Chart.yaml are pinned to the project
-      # version from gradle.properties, so one bump updates image tag AND chart.
-      # Re-pushing the same tag is idempotent.
+      # ---------------------------------------------------------------------
+      # Release-only steps (tag push)
+      # ---------------------------------------------------------------------
       - name: Publish Helm chart to GHCR (OCI)
+        if: steps.version.outputs.is_release == 'true'
         run: |
           set -euo pipefail
           helm registry login ghcr.io --username "$GH_USERNAME" --password-stdin <<< "$GH_TOKEN"
-          CHART_VERSION="${PROJECT_VERSION}"
-          sed -i "s/^version:.*/version: ${CHART_VERSION}/" helm/meta-api/Chart.yaml
-          sed -i "s|^appVersion:.*|appVersion: \"${CHART_VERSION}\"|" helm/meta-api/Chart.yaml
+          # Pin both chart versions to the release semver from the git tag.
+          sed -i "s/^version:.*/version: ${SEMVER}/" helm/meta-api/Chart.yaml
+          sed -i "s|^appVersion:.*|appVersion: \"${SEMVER}\"|" helm/meta-api/Chart.yaml
           PKG_DIR="$(mktemp -d)"
           helm package helm/meta-api -d "$PKG_DIR"
-          helm push "$PKG_DIR/meta-api-${CHART_VERSION}.tgz" oci://ghcr.io/neoforged
+          echo "PKG_DIR=${PKG_DIR}" >> "${GITHUB_ENV}"
+          helm push "${PKG_DIR}/meta-api-${SEMVER}.tgz" oci://ghcr.io/neoforged
         env:
-          PROJECT_VERSION: '${{ steps.project_version.outputs.version }}'
+          SEMVER: '${{ steps.version.outputs.semver }}'
           GH_USERNAME: '${{ github.actor }}'
           GH_TOKEN: '${{ github.token }}'
+
+      - name: Create GitHub Release
+        if: steps.version.outputs.is_release == 'true'
+        run: |
+          set -euo pipefail
+          gh release create "${TAG_NAME}" \
+            --title "Meta API v${SEMVER}" \
+            --notes "$(git log -1 --format=%B "${GITHUB_SHA}")"
+          # Attach the packaged chart for users who don't use OCI pull.
+          gh release upload "${TAG_NAME}" "${PKG_DIR}/meta-api-${SEMVER}.tgz" --clobber
+        env:
+          SEMVER: '${{ steps.version.outputs.semver }}'
+          TAG_NAME: '${{ steps.version.outputs.tag_name }}'
