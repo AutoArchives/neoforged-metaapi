@@ -3,6 +3,11 @@ Meta API release "{{ .Release.Name }}" was deployed to namespace "{{ .Release.Na
   Replicas:      {{ .Values.replicaCount }}
   Image:         {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
   Service:       {{ include "meta-api.fullname" . }} (port {{ .Values.service.port }})
+{{- if .Values.database.existingSecret }}
+  Database:      using existing Secret "{{ .Values.database.existingSecret }}" (keys url/username/password)
+{{- else }}
+  Database:      chart-managed Secret "{{ printf "%s-db" (include "meta-api.fullname" .) }}"
+{{- end }}
 
 Routing:
 {{- if and .Values.ingress.enabled .Values.gateway.enabled }}

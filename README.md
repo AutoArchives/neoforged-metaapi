@@ -90,10 +90,12 @@ It supports both clusters that use **Ingress** (legacy) and clusters that use th
 **Gateway API** (newer); enable exactly one of them:
 
 ```bash
-# Legacy cluster — Ingress
+# Legacy cluster — Ingress (chart-managed DB credentials)
 helm install meta-api ./helm/meta-api \
   -n meta --create-namespace \
   --set image.tag=1.0.0 \
+  --set database.url='jdbc:postgresql://db-host:5432/metaapi' \
+  --set database.password='<password>' \
   --set ingress.enabled=true \
   --set ingress.host=meta-api.prod.k8s.neoforged.net
 
@@ -105,8 +107,23 @@ helm install meta-api ./helm/meta-api \
   --set gateway.parentRef.name=<gateway-name> \
   --set 'gateway.hostnames[0]=meta-api.prod.k8s.neoforged.net'
 ```
-The chart expects an existing Secret `meta-api-db` with keys `url`, `username` and
-`password` (override the name via `database.existingSecret`). To run API-only replicas,
+Database credentials are provided in exactly one of two ways:
+
+- **Inline (default):** set `database.url`, `database.username` and `database.password`
+in the values; the chart then creates and manages a `<fullname>-db` Secret itself.
+  This is the recommended option for GitOps, since everything lives in the release.
+- **Pre-existing Secret:** leave the inline values empty and set
+  `database.existingSecret=<name>` pointing at a Secret with keys `url`, `username`
+  and `password`. The chart then does not create any database Secret itself:
+
+```bash
+kubectl create secret generic meta-api-db -n meta \
+  --from-literal=url='jdbc:postgresql://db-host:5432/metaapi' \
+  --from-literal=username=metaapi \
+  --from-literal=password='<password>'
+```
+
+To run API-only replicas,
 set `scheduledTasks.mavenVersionDiscoveryEnabled=false` and
 `scheduledTasks.minecraftVersionDiscoveryEnabled=false` on them, keeping at least one
 replica with both enabled.

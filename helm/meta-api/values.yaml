@@ -26,10 +26,22 @@ springProfilesActive: postgres
 # from the pod hostname (unique per replica, which is usually what you want).
 instanceId: ""
 
+# PostgreSQL connection data (postgres profile). Provide credentials in exactly ONE way:
+#   Option A: set `url`, `username` and `password` below — the chart then creates
+#             and manages a "<fullname>-db" Secret itself. Preferred for GitOps.
+#   Option B: leave url/username/password empty and set `existingSecret` to the name of
+#             a pre-existing Secret with keys `url`, `username` and `password`. E.g.: kubectl create secret generic meta-api-db \
+#               --from-literal=url='jdbc:postgresql://db:5432/metaapi' \
+#               --from-literal=username=metaapi \
+#               --from-literal=password='...' -n <ns>
 database:
-  # Name of an existing Secret that must contain keys: url, username, password.
-  #   url       = PostgreSQL JDBC URL, e.g. jdbc:postgresql://db:5432/metaapi
-  existingSecret: meta-api-db
+  # Option B: name of an existing Secret. When non-empty it takes precedence and
+  # the inline values are ignored (no chart-managed secret is created).
+  existingSecret: ""
+  # Option A: connection data, rendered into a chart-managed Secret.
+  url: ""   # e.g. jdbc:postgresql://db-host:5432/metaapi
+  username: "metaapi"
+  password: ""
   # HikariCP max pool size per replica. With 3 replicas on a modest Postgres,
   # keep this at 15 or lower (total connections = replicas * poolSize).
   poolSize: "15"

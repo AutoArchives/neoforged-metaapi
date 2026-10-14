@@ -41,20 +41,23 @@ spec:
             - name: INSTANCE_ID
               value: {{ . | quote }}
             {{- end }}
+{{/* Credentials come from database.existingSecret when set, otherwise from the
+    chart-managed "<fullname>-db" Secret created from the inline values. */}}
+{{- $dbSecretName := .Values.database.existingSecret | default (printf "%s-db" (include "meta-api.fullname" .)) }}
             - name: DB_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ required "database.existingSecret must be set (Secret with url/username/password keys)" .Values.database.existingSecret }}
+                  name: {{ $dbSecretName }}
                   key: url
             - name: DB_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.database.existingSecret }}
+                  name: {{ $dbSecretName }}
                   key: username
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.database.existingSecret }}
+                  name: {{ $dbSecretName }}
                   key: password
             # Connection pool size per replica (HikariCP). With multiple replicas
             # on a modest Postgres, keep this at 15 or lower.
