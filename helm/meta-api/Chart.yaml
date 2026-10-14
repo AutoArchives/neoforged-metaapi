@@ -11,8 +11,10 @@ description: |
   selected through values: `ingress.enabled` for clusters that use
   Ingress (legacy) and `gateway.enabled` for clusters that use the
   Gateway API (newer).
+# `version` and `appVersion` are kept in sync with the project version from
+# gradle.properties (project_version) by CI at publish time.
 type: application
-version: 0.1.0
+version: 1.0.0
 appVersion: "1.0.0"
 keywords:
   - meta-api

@@ -8,8 +8,10 @@ plugins {
     id 'com.google.cloud.tools.jib' version '3.5.1'
 }
 
+// Release version is defined in gradle.properties (project_version); CI reads the
+// same property for the image tag and both Helm chart versions.
 group = 'net.neoforged'
-version = '0.0.1-SNAPSHOT'
+version = property('project_version')
 description = 'Meta API for NeoForge'
 
 java {

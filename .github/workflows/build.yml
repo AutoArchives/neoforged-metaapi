@@ -23,6 +23,15 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 
+      # The project version in gradle.properties is the single source of truth;
+      # it tags the container image and both Helm chart versions.
+      - name: Read project version
+        id: project_version
+        run: |
+          v="$(sed -n 's/^project_version=//p' gradle.properties)"
+          if [ -z "$v" ]; then echo "project_version not found in gradle.properties" >&2; exit 1; fi
+          echo "version=${v}" >> "$GITHUB_OUTPUT"
+
       - name: Create Docker Metadata
         id: docker_metadata
         uses: docker/metadata-action@v5
@@ -30,7 +39,7 @@ jobs:
           images: ghcr.io/neoforged/metaapi
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=1.0.0
+            type=raw,value=${{ steps.project_version.outputs.version }}
             type=schedule
             type=ref,event=branch
             type=ref,event=tag
@@ -43,17 +52,21 @@ jobs:
           GH_PASSWORD: '${{ github.token }}'
           DOCKER_METADATA_JSON: '${{ steps.docker_metadata.outputs.json }}'
 
-      # Publishes the Helm chart as an OCI artifact to ghcr.io/neoforged/meta-api,
-      # tagged with the version from helm/meta-api/Chart.yaml (bump it in the
-      # commit when the chart changes). Re-pushing the same tag is idempotent.
+      # Publishes the Helm chart as an OCI artifact to ghcr.io/neoforged/meta-api.
+      # Both `version` and `appVersion` in Chart.yaml are pinned to the project
+      # version from gradle.properties, so one bump updates image tag AND chart.
+      # Re-pushing the same tag is idempotent.
       - name: Publish Helm chart to GHCR (OCI)
         run: |
           set -euo pipefail
           helm registry login ghcr.io --username "$GH_USERNAME" --password-stdin <<< "$GH_TOKEN"
-          CHART_VERSION="$(sed -n 's/^version:[[:space:]]*//p' helm/meta-api/Chart.yaml)"
+          CHART_VERSION="${PROJECT_VERSION}"
+          sed -i "s/^version:.*/version: ${CHART_VERSION}/" helm/meta-api/Chart.yaml
+          sed -i "s|^appVersion:.*|appVersion: \"${CHART_VERSION}\"|" helm/meta-api/Chart.yaml
           PKG_DIR="$(mktemp -d)"
           helm package helm/meta-api -d "$PKG_DIR"
           helm push "$PKG_DIR/meta-api-${CHART_VERSION}.tgz" oci://ghcr.io/neoforged
         env:
+          PROJECT_VERSION: '${{ steps.project_version.outputs.version }}'
           GH_USERNAME: '${{ github.actor }}'
           GH_TOKEN: '${{ github.token }}'
