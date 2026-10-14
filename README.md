@@ -85,8 +85,18 @@ Scheduled discovery jobs are coordinated between replicas via distributed databa
 so exactly one replica runs each job per scheduled slot. See `.agent/plans/ha-setup.md`
 for the full design.
 
-The canonical deployment artifact is the Helm chart in [`helm/meta-api`](./helm/meta-api).
-It supports both clusters that use **Ingress** (legacy) and clusters that use the
+The container image `ghcr.io/neoforged/metaapi` is published as a multi-platform
+(amd64 + arm64) OCI index on every push to `main`. The Helm chart lives in
+[`helm/meta-api`](./helm/meta-api) and is also published to GHCR as an OCI artifact
+(`oci://ghcr.io/neoforged/meta-api`, tagged with the version from its `Chart.yaml`),
+so you can either clone the repo or pull it directly:
+
+```bash
+# Pull the chart from GHCR (requires ghcr credentials for a private package)
+helm registry login ghcr.io
+helm pull oci://ghcr.io/neoforged/meta-api --version 0.1.0 -d .
+```
+The chart supports both clusters that use **Ingress** (legacy) and clusters that use the
 **Gateway API** (newer); enable exactly one of them:
 
 ```bash

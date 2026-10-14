@@ -29,6 +29,14 @@ final dockerMetadataJson = providers.environmentVariable("DOCKER_METADATA_JSON")
 jib {
     from {
         image = project.docker_base_image
+        // Publish a multi-platform OCI index (amd64 + arm64). The app layers
+        // are pure Java and shared across architectures; Jib only resolves a
+        // per-arch base image. Without this, Jib publishes a single manifest
+        // for the builder's architecture.
+        platforms {
+            platform { os = 'linux'; architecture = 'amd64' }
+            platform { os = 'linux'; architecture = 'arm64' }
+        }
     }
     to {
         image = 'ghcr.io/neoforged/metaapi'
