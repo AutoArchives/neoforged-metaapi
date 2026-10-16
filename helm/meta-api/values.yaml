@@ -105,15 +105,12 @@ ingress:
 gateway:
   enabled: false
   parentRef:
-    # Name of the Gateway this route attaches to (required when enabled).
+    # Name of the gateway to host it from
     name: ""
-    # The following are optional; these are the spec defaults.
-    group: gateway.networking.k8s.io
-    kind: Gateway
-    # Namespace of the Gateway when it lives outside the release namespace.
+    # The namespace in which the gateway lives.
     namespace: ""
-  # HTTP listener port on the parent Gateway.
-  port: 80
+    # The connection section in which we need to be referenced.
+    sectionName: ""
   # Hostnames this route serves; empty = all hosts allowed by the Gateway.
   hostnames: []
     # - meta-api.prod.k8s.neoforged.net
