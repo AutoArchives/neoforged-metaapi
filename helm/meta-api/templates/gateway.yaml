@@ -20,7 +20,7 @@ spec:
   rules:
     # No explicit matches: per the Gateway API spec this defaults to a PathPrefix
     # match on "/" for all methods, which is what we want (the app serves /).
-    backendRefs:
+    - backendRefs:
       - name: {{ include "meta-api.fullname" . }}
         port: {{ required "service.port is required when gateway.enabled=true" .Values.service.port }}
 {{- end }}
