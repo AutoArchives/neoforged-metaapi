@@ -9,16 +9,8 @@ metadata:
 spec:
   parentRefs:
     - name: {{ required "gateway.parentRef.name is required when gateway.enabled=true (name of the Gateway)" .Values.gateway.parentRef.name }}
-      {{- with .Values.gateway.parentRef.group }}
-      group: {{ . }}
-      {{- end }}
-      {{- with .Values.gateway.parentRef.kind }}
-      kind: {{ . }}
-      {{- end }}
-      {{- if .Values.gateway.parentRef.namespace }}
-      namespace: {{ .Values.gateway.parentRef.namespace }}
-      {{- end }}
-      port: {{ required "gateway.port is required when gateway.enabled=true (HTTP listener port on the Gateway)" .Values.gateway.port }}
+      namespace:  {{ required "gateway.parentRef.namespace is required when gateway.enabled=true (namespace of the Gateway)" .Values.gateway.parentRef.namespace }}
+      sectionName:  {{ required "gateway.parentRef.sectionName is required when gateway.enabled=true (section of the Gateway)" .Values.gateway.parentRef.sectionName }}
   {{- with .Values.gateway.hostnames }}
   hostnames:
     {{- range . }}
