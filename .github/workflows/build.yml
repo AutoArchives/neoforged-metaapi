@@ -64,7 +64,9 @@ jobs:
             # Release tag = the semver from the git tag; dev builds = short SHA.
             type=raw,value=${{ steps.version.outputs.semver }}
             # Dev builds additionally get a stable per-branch pointer (e.g. feature-ha-capable).
-            type=ref,event=branch,enable={{ steps.version.outputs.is_release == 'false' }}
+            # GitHub expands this to a literal true/false (the action's own template
+            # engine does not support comparison operators).
+            type=ref,event=branch,enable=${{ steps.version.outputs.is_release == 'false' }}
             # `latest` always points at the most recent release.
             type=raw,value=latest,enable={{ startsWith(github.ref, 'refs/tags/v') }}
 
