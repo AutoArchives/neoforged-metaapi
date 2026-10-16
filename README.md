@@ -104,10 +104,12 @@ release build that publishes:
   (`helm pull oci://ghcr.io/neoforged/meta-api --version 1.2.3 -d .`),
 - a GitHub Release with the chart `.tgz` attached.
 
-Pushes to **any branch** (or manual dispatch) produce ephemeral dev/test images on
-GHCR tagged with both the short commit SHA and the branch name (slashes → dashes,
-case preserved, e.g. `feature-HA-Capable`) — no chart publish, no release. The branch tag always
-points at that branch's latest push; pin an exact build for testing with
+Pushes to **any branch** (or manual dispatch) produce ephemeral dev/test builds on GHCR —
+no GitHub Release is created. The image gets both a short-SHA tag and a per-branch pointer
+(slashes → dashes, case preserved, e.g. `feature-HA-Capable`), and a matching Helm chart is
+published at `oci://ghcr.io/neoforged/meta-api:0.0.0-feature-HA-Capable`. Both always point at
+that branch's latest push; the chart version is a semver prerelease, so address it by explicit
+`--version` (it won't show up in default version listings). Pin an exact image build with
 `--set image.tag=<short-sha>`. To cut a release:
 tag and push (`git tag v1.2.3 && git push origin v1.2.3`).
 The chart supports both clusters that use **Ingress** (legacy) and clusters that use the

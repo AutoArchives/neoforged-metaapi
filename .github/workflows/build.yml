@@ -98,6 +98,32 @@ jobs:
           GH_USERNAME: '${{ github.actor }}'
           GH_TOKEN: '${{ github.token }}'
 
+      # ---------------------------------------------------------------------
+      # Dev-build chart publish (branch push / manual dispatch)
+      # ---------------------------------------------------------------------
+      - name: Publish Helm chart to GHCR under per-branch tag
+        if: steps.version.outputs.is_release == 'false' && startsWith(github.ref, 'refs/heads/')
+        run: |
+          set -euo pipefail
+          helm registry login ghcr.io --username "$GH_USERNAME" --password-stdin <<< "$GH_TOKEN"
+          # Helm v4 derives the OCI ref from Chart.yaml (<namespace>/<name>:<version>),
+          # so encode the branch pointer as a semver-valid prerelease version. Branch
+          # names are assumed to contain only [A-Za-z0-9/._] (dots are legal here).
+          BRANCH_TAG="${GITHUB_REF#refs/heads/}"
+          BRANCH_TAG="${BRANCH_TAG//\//-}"   # same tag as the docker/metadata-action image
+          sed -i "s/^version:.*/version: 0.0.0-${BRANCH_TAG}/" helm/meta-api/Chart.yaml
+          # appVersion carries the default image tag, so a bare install of this chart
+          # auto-selects this branch's latest test image (override with --set image.tag).
+          sed -i "s|^appVersion:.*|appVersion: \"${BRANCH_TAG}\"|" helm/meta-api/Chart.yaml
+          PKG_DIR="$(mktemp -d)"
+          helm package helm/meta-api -d "$PKG_DIR"
+          # Re-pushing the same ref overwrites, so each branch always has exactly one
+          # up-to-date chart: oci://ghcr.io/neoforged/meta-api:0.0.0-<branch-tag>
+          helm push "${PKG_DIR}/meta-api-0.0.0-${BRANCH_TAG}.tgz" oci://ghcr.io/neoforged
+        env:
+          GH_USERNAME: '${{ github.actor }}'
+          GH_TOKEN: '${{ github.token }}'
+
       - name: Create GitHub Release
         if: steps.version.outputs.is_release == 'true'
         run: |
