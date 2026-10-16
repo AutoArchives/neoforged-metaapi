@@ -5,8 +5,9 @@ name: Build & publish
 #                              Helm chart published to GHCR as OCI at version
 #                              X.Y.Z, GitHub Release created with the chart .tgz.
 #   - Push to any branch / manual dispatch -> dev (test) build only:
-#     ephemeral image on GHCR tagged with the short commit SHA AND the sanitized
-#     branch name (e.g. `feature-ha-capable`); no chart publish, no release.
+#     ephemeral image on GHCR tagged with the short commit SHA AND the branch name
+#     (slashes replaced by dashes, case preserved, e.g. `feature-HA-Capable`);
+#     no chart publish, no release.
 #     Deploy a branch for testing with: --set image.tag=<short-sha>
 #     (the branch tag always points at that branch's latest push).
 
@@ -63,7 +64,7 @@ jobs:
           tags: |
             # Release tag = the semver from the git tag; dev builds = short SHA.
             type=raw,value=${{ steps.version.outputs.semver }}
-            # Dev builds additionally get a stable per-branch pointer (e.g. feature-ha-capable).
+            # Dev builds additionally get a stable per-branch pointer (e.g. feature-HA-Capable).
             # GitHub expands this to a literal true/false (the action's own template
             # engine does not support comparison operators).
             type=ref,event=branch,enable=${{ steps.version.outputs.is_release == 'false' }}

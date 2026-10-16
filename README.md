@@ -105,8 +105,8 @@ release build that publishes:
 - a GitHub Release with the chart `.tgz` attached.
 
 Pushes to **any branch** (or manual dispatch) produce ephemeral dev/test images on
-GHCR tagged with both the short commit SHA and the sanitized branch name
-(e.g. `feature-ha-capable`) — no chart publish, no release. The branch tag always
+GHCR tagged with both the short commit SHA and the branch name (slashes → dashes,
+case preserved, e.g. `feature-HA-Capable`) — no chart publish, no release. The branch tag always
 points at that branch's latest push; pin an exact build for testing with
 `--set image.tag=<short-sha>`. To cut a release:
 tag and push (`git tag v1.2.3 && git push origin v1.2.3`).
