@@ -1,16 +1,19 @@
 name: Build & publish
 
 # Versioning model: git tags are releases (semantic versioning).
-#   - Push a tag `vX.Y.Z`  -> release build: image tagged X.Y.Z (+ latest),
+#   - Push a tag `vX.Y.Z` -> release build: image tagged X.Y.Z (+ latest),
 #                              Helm chart published to GHCR as OCI at version
 #                              X.Y.Z, GitHub Release created with the chart .tgz.
-#   - Push to main / manual dispatch -> dev build only: ephemeral image tagged
-#     with the short commit SHA; no chart publish, no release.
+#   - Push to any branch / manual dispatch -> dev (test) build only:
+#     ephemeral image on GHCR tagged with the short commit SHA AND the sanitized
+#     branch name (e.g. `feature-ha-capable`); no chart publish, no release.
+#     Deploy a branch for testing with: --set image.tag=<short-sha>
+#     (the branch tag always points at that branch's latest push).
 
 on:
   push:
     branches:
-      - main
+      - '**'
     tags:
       # Semantic version tags, e.g. v1.0.0, v1.2.3-rc.1
       - 'v[0-9]+.*'
@@ -60,6 +63,8 @@ jobs:
           tags: |
             # Release tag = the semver from the git tag; dev builds = short SHA.
             type=raw,value=${{ steps.version.outputs.semver }}
+            # Dev builds additionally get a stable per-branch pointer (e.g. feature-ha-capable).
+            type=ref,event=branch,enable={{ steps.version.outputs.is_release == 'false' }}
             # `latest` always points at the most recent release.
             type=raw,value=latest,enable={{ startsWith(github.ref, 'refs/tags/v') }}
 
