@@ -18,7 +18,6 @@ spec:
     metadata:
       labels:
         {{- include "meta-api.labels" . | nindent 8 }}
-        {{- include "meta-api.selectorLabels" . | nindent 8 }}
     spec:
       {{- with .Values.pullSecrets }}
       imagePullSecrets:
